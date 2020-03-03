@@ -35,6 +35,7 @@ import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.TestLogger;
 import org.apache.flink.yarn.cli.FlinkYarnSessionCli;
 import org.apache.flink.yarn.configuration.YarnConfigOptions;
+import org.apache.flink.yarn.executors.YarnJobClusterExecutor;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -181,6 +182,22 @@ public class FlinkYarnSessionCliTest extends TestLogger {
 		final ApplicationId clusterId = clientFactory.getClusterId(executorConfig);
 
 		assertEquals(TEST_YARN_APPLICATION_ID, clusterId);
+	}
+
+	@Test
+	public void testDeployYarnJobClusterWithYarnPropertiesFile() throws Exception {
+		File directoryPath = writeYarnPropertiesFile(validPropertiesFile);
+
+		Configuration configuration = new Configuration();
+		configuration.setString(YarnConfigOptions.PROPERTIES_FILE_LOCATION, directoryPath.getAbsolutePath());
+		configuration.setString(DeploymentOptions.TARGET, YarnJobClusterExecutor.NAME);
+
+		FlinkYarnSessionCli flinkYarnSessionCli = createFlinkYarnSessionCli(configuration);
+		CommandLine commandLine = flinkYarnSessionCli.parseCommandLineOptions(new String[] {}, true);
+		Configuration executorConfig = flinkYarnSessionCli.applyCommandLineOptionsToConfiguration(commandLine);
+
+		String errorMsg = String.format("execution target was set to %s and should be retained even if yarn properties file is present", YarnJobClusterExecutor.NAME);
+		assertEquals(errorMsg, YarnJobClusterExecutor.NAME, executorConfig.getString(DeploymentOptions.TARGET));
 	}
 
 	/**

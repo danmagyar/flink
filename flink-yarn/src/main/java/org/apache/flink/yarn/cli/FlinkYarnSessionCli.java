@@ -345,7 +345,9 @@ public class FlinkYarnSessionCli extends AbstractCustomCommandLine {
 
 			effectiveConfiguration.setString(HA_CLUSTER_ID, zooKeeperNamespace);
 			effectiveConfiguration.setString(YarnConfigOptions.APPLICATION_ID, ConverterUtils.toString(applicationId));
-			effectiveConfiguration.setString(DeploymentOptions.TARGET, YarnSessionClusterExecutor.NAME);
+			if (effectiveConfiguration.getString(DeploymentOptions.TARGET) == null) {
+				effectiveConfiguration.setString(DeploymentOptions.TARGET, YarnSessionClusterExecutor.NAME);
+			}
 		} else {
 			effectiveConfiguration.setString(DeploymentOptions.TARGET, YarnJobClusterExecutor.NAME);
 		}
