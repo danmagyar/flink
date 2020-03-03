@@ -293,7 +293,7 @@ public class FlinkYarnSessionCliTest extends TestLogger {
 		configuration.set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, MemorySize.ofMebiBytes(taskManagerMemory));
 		configuration.setInteger(TaskManagerOptions.NUM_TASK_SLOTS, slotsPerTaskManager);
 
-		final String[] args = {"-yjm", String.valueOf(jobManagerMemory) + "m", "-ytm", String.valueOf(taskManagerMemory) + "m", "-ys", String.valueOf(slotsPerTaskManager)};
+		final String[] args = {"-yjm", jobManagerMemory + "m", "-ytm", taskManagerMemory + "m", "-ys", String.valueOf(slotsPerTaskManager)};
 		final FlinkYarnSessionCli flinkYarnSessionCli = createFlinkYarnSessionCli(configuration);
 
 		CommandLine commandLine = flinkYarnSessionCli.parseCommandLineOptions(args, false);
@@ -390,6 +390,7 @@ public class FlinkYarnSessionCliTest extends TestLogger {
 	/**
 	 * Tests the specifying heap memory with old config key for job manager and task manager.
 	 */
+	@SuppressWarnings("deprecation")
 	@Test
 	public void testHeapMemoryPropertyWithOldConfigKey() throws Exception {
 		Configuration configuration = new Configuration();

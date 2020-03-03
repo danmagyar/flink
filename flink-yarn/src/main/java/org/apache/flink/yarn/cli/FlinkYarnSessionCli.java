@@ -174,6 +174,7 @@ public class FlinkYarnSessionCli extends AbstractCustomCommandLine {
 		this(configuration, new DefaultClusterClientServiceLoader(), configurationDirectory, shortPrefix, longPrefix, acceptInteractiveInput);
 	}
 
+	@SuppressWarnings("deprecation")
 	public FlinkYarnSessionCli(
 			Configuration configuration,
 			ClusterClientServiceLoader clusterClientServiceLoader,
@@ -398,6 +399,7 @@ public class FlinkYarnSessionCli extends AbstractCustomCommandLine {
 		return null;
 	}
 
+	@SuppressWarnings("deprecation")
 	private void applyDescriptorOptionToConfig(final CommandLine commandLine, final Configuration configuration) {
 		checkNotNull(commandLine);
 		checkNotNull(configuration);
@@ -492,11 +494,12 @@ public class FlinkYarnSessionCli extends AbstractCustomCommandLine {
 		return canApplyYarnProperties;
 	}
 
+	@SuppressWarnings("deprecation")
 	private boolean isDetachedOption(Option option) {
 		return option.getOpt().equals(YARN_DETACHED_OPTION.getOpt()) || option.getOpt().equals(DETACHED_OPTION.getOpt());
 	}
 
-	private Configuration applyYarnProperties(Configuration configuration) throws FlinkException {
+	private Configuration applyYarnProperties(Configuration configuration) {
 		final Configuration effectiveConfiguration = new Configuration(configuration);
 
 		String applicationId = yarnPropertiesFile.getProperty(YARN_APPLICATION_ID_KEY);
