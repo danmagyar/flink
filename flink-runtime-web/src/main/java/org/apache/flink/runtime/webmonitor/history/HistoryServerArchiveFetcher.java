@@ -49,8 +49,10 @@ import java.io.StringWriter;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -117,10 +119,11 @@ class HistoryServerArchiveFetcher {
 		List<HistoryServer.RefreshLocation> refreshDirs,
 		File webDir,
 		Consumer<ArchiveEvent> jobArchiveEventListener,
-		boolean cleanupExpiredArchives
+		boolean cleanupExpiredArchives,
+		int maxHistorySize
 	) {
 		this.refreshIntervalMillis = refreshIntervalMillis;
-		this.fetcherTask = new JobArchiveFetcherTask(refreshDirs, webDir, jobArchiveEventListener, cleanupExpiredArchives);
+		this.fetcherTask = new JobArchiveFetcherTask(refreshDirs, webDir, jobArchiveEventListener, cleanupExpiredArchives, maxHistorySize);
 		if (LOG.isInfoEnabled()) {
 			for (HistoryServer.RefreshLocation refreshDir : refreshDirs) {
 				LOG.info("Monitoring directory {} for archived jobs.", refreshDir.getPath());
@@ -156,6 +159,7 @@ class HistoryServerArchiveFetcher {
 		private final List<HistoryServer.RefreshLocation> refreshDirs;
 		private final Consumer<ArchiveEvent> jobArchiveEventListener;
 		private final boolean processArchiveDeletion;
+		private final int maxHistorySize;
 
 		/** Cache of all available jobs identified by their id. */
 		private final Set<String> cachedArchives;
@@ -170,11 +174,13 @@ class HistoryServerArchiveFetcher {
 			List<HistoryServer.RefreshLocation> refreshDirs,
 			File webDir,
 			Consumer<ArchiveEvent> jobArchiveEventListener,
-			boolean processArchiveDeletion
+			boolean processArchiveDeletion,
+			int maxHistorySize
 		) {
 			this.refreshDirs = checkNotNull(refreshDirs);
 			this.jobArchiveEventListener = jobArchiveEventListener;
 			this.processArchiveDeletion = processArchiveDeletion;
+			this.maxHistorySize = maxHistorySize;
 			this.cachedArchives = new HashSet<>();
 			this.webDir = checkNotNull(webDir);
 			this.webJobDir = new File(webDir, "jobs");
@@ -205,6 +211,10 @@ class HistoryServerArchiveFetcher {
 					if (jobArchives == null) {
 						continue;
 					}
+
+					Arrays.sort(jobArchives, Comparator.comparingLong(FileStatus::getModificationTime).reversed());
+
+					int historySize = 0;
 					for (FileStatus jobArchive : jobArchives) {
 						Path jobArchivePath = jobArchive.getPath();
 						String jobID = jobArchivePath.getName();
@@ -215,6 +225,16 @@ class HistoryServerArchiveFetcher {
 								refreshDir, jobID, iae);
 							continue;
 						}
+
+						if (++historySize > maxHistorySize) {
+							try {
+								jobArchivePath.getFileSystem().delete(jobArchivePath, false);
+							} catch (IOException ioe) {
+								LOG.error("Error while deleting expired archive " + jobArchivePath, ioe);
+							}
+							continue;
+						}
+
 						jobsToRemove.remove(jobID);
 
 						if (cachedArchives.contains(jobID)) {

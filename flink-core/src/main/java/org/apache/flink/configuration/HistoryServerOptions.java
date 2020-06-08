@@ -99,6 +99,11 @@ public class HistoryServerOptions {
 			.withDescription("Enable HTTPs access to the HistoryServer web frontend. This is applicable only when the" +
 				" global SSL flag security.ssl.enabled is set to true.");
 
+	public static final ConfigOption<Integer> HISTORY_SERVER_MAX_SIZE =
+		key("historyserver.max.history.size")
+			.defaultValue(50)
+			.withDescription("Maximum number of jobs to keep in the history server.");
+
 	private HistoryServerOptions() {
 	}
 }

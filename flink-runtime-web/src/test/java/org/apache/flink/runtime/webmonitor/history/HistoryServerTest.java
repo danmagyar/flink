@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.webmonitor.history;
 
+import com.google.common.collect.Sets;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -59,11 +60,10 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertTrue;
 
@@ -154,6 +154,40 @@ public class HistoryServerTest extends TestLogger {
 	}
 
 	@Test
+	public void testOldestModifiedArchivesBeyondHistorySizeLimitAreDiscarded() throws Exception {
+		final int numJobs = 4;
+		final int numJobsToKeepInHistory = 2;
+		final int numJobsToDiscardFromHistory = numJobs - numJobsToKeepInHistory;
+		final long oneMinuteSinceEpoch = 1000L * 60L;
+		Set<String> expectedJobIdsToKeep = new HashSet<>();
+
+		for (int j = 0; j < numJobs; j++) {
+			String jobId = createLegacyArchive(jmDirectory.toPath(), j * oneMinuteSinceEpoch);
+			if( j >= numJobsToDiscardFromHistory){
+				expectedJobIdsToKeep.add(jobId);
+			}
+		}
+		waitForArchivesCreation(numJobs);
+
+		Configuration historyServerConfig = createTestConfiguration();
+		historyServerConfig.set(HistoryServerOptions.HISTORY_SERVER_MAX_SIZE, numJobsToKeepInHistory);
+		HistoryServer hs = new HistoryServer(historyServerConfig);
+
+		try {
+			hs.start();
+			String baseUrl = "http://localhost:" + hs.getWebPort();
+			Collection<JobDetails> jobs = getJobsOverview(baseUrl).getJobs();
+			Assert.assertEquals(numJobsToKeepInHistory, jobs.size());
+			Assert.assertEquals(expectedJobIdsToKeep, jobs.stream()
+				.map(JobDetails::getJobId)
+				.map(JobID::toString)
+				.collect(Collectors.toSet()));
+		} finally {
+			hs.stop();
+		}
+	}
+
+	@Test
 	public void testCleanExpiredJob() throws Exception {
 		runArchiveExpirationTest(true);
 	}
@@ -231,6 +265,10 @@ public class HistoryServerTest extends TestLogger {
 		}
 	}
 
+	private Configuration createTestConfiguration() {
+		return createTestConfiguration(HistoryServerOptions.HISTORY_SERVER_CLEANUP_EXPIRED_JOBS.defaultValue());
+	}
+
 	private Configuration createTestConfiguration(boolean cleanupExpiredJobs) {
 		Configuration historyServerConfig = new Configuration();
 		historyServerConfig.setString(HistoryServerOptions.HISTORY_SERVER_ARCHIVE_DIRS, jmDirectory.toURI().toString());
@@ -277,6 +315,13 @@ public class HistoryServerTest extends TestLogger {
 		return Tuple2.of(connection.getResponseCode(), IOUtils.toString(is, connection.getContentEncoding() != null ? connection.getContentEncoding() : "UTF-8"));
 	}
 
+	private static String createLegacyArchive(Path directory, long fileLastModifiedDate) throws IOException {
+		String jobId = createLegacyArchive(directory);
+		File jobArchive = directory.resolve(jobId).toFile();
+		jobArchive.setLastModified(fileLastModifiedDate);
+		return jobId;
+	}
+
 	private static String createLegacyArchive(Path directory) throws IOException {
 		JobID jobId = JobID.generate();
 
@@ -315,9 +360,7 @@ public class HistoryServerTest extends TestLogger {
 			}
 		}
 		String json = sw.toString();
-
 		ArchivedJson archivedJson = new ArchivedJson("/joboverview", json);
-
 		FsJobArchivist.archiveJob(new org.apache.flink.core.fs.Path(directory.toUri()), jobId, Collections.singleton(archivedJson));
 
 		return jobId.toString();
