@@ -195,6 +195,7 @@ class HistoryServerArchiveFetcher {
 				LOG.debug("Starting archive fetching.");
 				List<ArchiveEvent> events = new ArrayList<>();
 				Set<String> jobsToRemove = new HashSet<>(cachedArchives);
+				Set<Path> oldJobArchivesToRemove = new HashSet<>();
 				for (HistoryServer.RefreshLocation refreshLocation : refreshDirs) {
 					Path refreshDir = refreshLocation.getPath();
 					FileSystem refreshFS = refreshLocation.getFs();
@@ -227,12 +228,7 @@ class HistoryServerArchiveFetcher {
 						}
 
 						if (++historySize > maxHistorySize) {
-							try {
-								jobArchivePath.getFileSystem().delete(jobArchivePath, false);
-							} catch (IOException ioe) {
-								LOG.error("Error while deleting expired archive " + jobArchivePath, ioe);
-							}
-							continue;
+							oldJobArchivesToRemove.add(jobArchivePath);
 						}
 
 						jobsToRemove.remove(jobID);
@@ -305,6 +301,9 @@ class HistoryServerArchiveFetcher {
 				if (!jobsToRemove.isEmpty() && processArchiveDeletion) {
 					events.addAll(cleanupExpiredJobs(jobsToRemove));
 				}
+				if (!oldJobArchivesToRemove.isEmpty()) {
+					events.addAll(cleanupOldJobs(oldJobArchivesToRemove));
+				}
 				if (!events.isEmpty()) {
 					updateJobOverview(webOverviewDir, webDir);
 				}
@@ -313,6 +312,19 @@ class HistoryServerArchiveFetcher {
 			} catch (Exception e) {
 				LOG.error("Critical failure while fetching/processing job archives.", e);
 			}
+		}
+
+		private List<ArchiveEvent> cleanupOldJobs(Set<Path> jobArchivesToRemove) {
+			Set<String> jobIdsToRemoveFromOverview = new HashSet<>();
+			for (Path archive : jobArchivesToRemove ) {
+				jobIdsToRemoveFromOverview.add(archive.getName());
+				try {
+					archive.getFileSystem().delete(archive, false);
+				} catch (IOException ioe) {
+					LOG.error("Error while deleting old archive " + archive, ioe);
+				}
+			}
+			return cleanupExpiredJobs(jobIdsToRemoveFromOverview);
 		}
 
 		private List<ArchiveEvent> cleanupExpiredJobs(Set<String> jobsToRemove) {

@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.webmonitor.history;
 
-import com.google.common.collect.Sets;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -154,37 +153,46 @@ public class HistoryServerTest extends TestLogger {
 	}
 
 	@Test
-	public void testOldestModifiedArchivesBeyondHistorySizeLimitAreDiscarded() throws Exception {
-		final int numJobs = 4;
+	public void testRemoveOldestModifiedArchivesOverHistorySizeLimit() throws Exception {
+		final int numInitialJobs = 4;
 		final int numJobsToKeepInHistory = 2;
-		final int numJobsToDiscardFromHistory = numJobs - numJobsToKeepInHistory;
+		final int firstJobToKeep = numInitialJobs - numJobsToKeepInHistory;
 		final long oneMinuteSinceEpoch = 1000L * 60L;
 		Set<String> expectedJobIdsToKeep = new HashSet<>();
 
-		for (int j = 0; j < numJobs; j++) {
+		for (int j = 0; j < numInitialJobs; j++) {
 			String jobId = createLegacyArchive(jmDirectory.toPath(), j * oneMinuteSinceEpoch);
-			if( j >= numJobsToDiscardFromHistory){
+			if( j >= firstJobToKeep){
 				expectedJobIdsToKeep.add(jobId);
 			}
 		}
-		waitForArchivesCreation(numJobs);
 
-		Configuration historyServerConfig = createTestConfiguration();
+		Configuration historyServerConfig = createTestConfiguration(HistoryServerOptions.HISTORY_SERVER_CLEANUP_EXPIRED_JOBS.defaultValue());
 		historyServerConfig.set(HistoryServerOptions.HISTORY_SERVER_MAX_SIZE, numJobsToKeepInHistory);
+		historyServerConfig.set(HistoryServerOptions.HISTORY_SERVER_ARCHIVE_REFRESH_INTERVAL, 100L);
 		HistoryServer hs = new HistoryServer(historyServerConfig);
 
 		try {
 			hs.start();
 			String baseUrl = "http://localhost:" + hs.getWebPort();
-			Collection<JobDetails> jobs = getJobsOverview(baseUrl).getJobs();
-			Assert.assertEquals(numJobsToKeepInHistory, jobs.size());
-			Assert.assertEquals(expectedJobIdsToKeep, jobs.stream()
-				.map(JobDetails::getJobId)
-				.map(JobID::toString)
-				.collect(Collectors.toSet()));
+			Assert.assertEquals(numJobsToKeepInHistory, getOverviewJobIds(baseUrl).size());
+			Assert.assertEquals(expectedJobIdsToKeep, getOverviewJobIds(baseUrl));
+
+			String newJobId = createLegacyArchive(jmDirectory.toPath(), numInitialJobs * oneMinuteSinceEpoch);
+			Thread.sleep(historyServerConfig.getLong(HistoryServerOptions.HISTORY_SERVER_ARCHIVE_REFRESH_INTERVAL));
+			Assert.assertEquals(numJobsToKeepInHistory, getOverviewJobIds(baseUrl).size());
+			Assert.assertTrue(getOverviewJobIds(baseUrl).contains(newJobId));
+
 		} finally {
 			hs.stop();
 		}
+	}
+
+	private Set<String> getOverviewJobIds(String baseUrl) throws Exception {
+		return getJobsOverview(baseUrl).getJobs().stream()
+			.map(JobDetails::getJobId)
+			.map(JobID::toString)
+			.collect(Collectors.toSet());
 	}
 
 	@Test
@@ -265,10 +273,6 @@ public class HistoryServerTest extends TestLogger {
 		}
 	}
 
-	private Configuration createTestConfiguration() {
-		return createTestConfiguration(HistoryServerOptions.HISTORY_SERVER_CLEANUP_EXPIRED_JOBS.defaultValue());
-	}
-
 	private Configuration createTestConfiguration(boolean cleanupExpiredJobs) {
 		Configuration historyServerConfig = new Configuration();
 		historyServerConfig.setString(HistoryServerOptions.HISTORY_SERVER_ARCHIVE_DIRS, jmDirectory.toURI().toString());
@@ -315,10 +319,10 @@ public class HistoryServerTest extends TestLogger {
 		return Tuple2.of(connection.getResponseCode(), IOUtils.toString(is, connection.getContentEncoding() != null ? connection.getContentEncoding() : "UTF-8"));
 	}
 
-	private static String createLegacyArchive(Path directory, long fileLastModifiedDate) throws IOException {
+	private static String createLegacyArchive(Path directory, long fileModifiedDate) throws IOException {
 		String jobId = createLegacyArchive(directory);
 		File jobArchive = directory.resolve(jobId).toFile();
-		jobArchive.setLastModified(fileLastModifiedDate);
+		jobArchive.setLastModified(fileModifiedDate);
 		return jobId;
 	}
 
