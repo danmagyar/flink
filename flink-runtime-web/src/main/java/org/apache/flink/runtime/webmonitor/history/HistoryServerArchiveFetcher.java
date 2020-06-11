@@ -303,7 +303,7 @@ class HistoryServerArchiveFetcher {
 					events.addAll(cleanupExpiredJobs(jobsToRemove));
 				}
 				if (!archivesBeyondSizeLimit.isEmpty()) {
-					events.addAll(cleanupOldJobs(archivesBeyondSizeLimit));
+					events.addAll(cleanupJobsBeyondSizeLimit(archivesBeyondSizeLimit));
 				}
 				if (!events.isEmpty()) {
 					updateJobOverview(webOverviewDir, webDir);
@@ -315,7 +315,7 @@ class HistoryServerArchiveFetcher {
 			}
 		}
 
-		private List<ArchiveEvent> cleanupOldJobs(Set<Path> jobArchivesToRemove) {
+		private List<ArchiveEvent> cleanupJobsBeyondSizeLimit(Set<Path> jobArchivesToRemove) {
 			Set<String> jobIdsToRemoveFromOverview = new HashSet<>();
 			for (Path archive : jobArchivesToRemove ) {
 				jobIdsToRemoveFromOverview.add(archive.getName());

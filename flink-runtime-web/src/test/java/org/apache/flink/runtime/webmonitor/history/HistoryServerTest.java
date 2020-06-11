@@ -158,12 +158,12 @@ public class HistoryServerTest extends TestLogger {
 		final int numJobsToKeepInHistory = 2;
 		final int firstJobToKeep = numInitialJobs - numJobsToKeepInHistory;
 		final long oneMinuteSinceEpoch = 1000L * 60L;
-		Set<String> expectedJobIdsToKeep = new HashSet<>();
+		Set<String> expectedInitialJobIdsToKeep = new HashSet<>();
 
 		for (int j = 0; j < numInitialJobs; j++) {
 			String jobId = createLegacyArchive(jmDirectory.toPath(), j * oneMinuteSinceEpoch);
 			if( j >= firstJobToKeep){
-				expectedJobIdsToKeep.add(jobId);
+				expectedInitialJobIdsToKeep.add(jobId);
 			}
 		}
 
@@ -175,14 +175,12 @@ public class HistoryServerTest extends TestLogger {
 		try {
 			hs.start();
 			String baseUrl = "http://localhost:" + hs.getWebPort();
-			Assert.assertEquals(numJobsToKeepInHistory, getOverviewJobIds(baseUrl).size());
-			Assert.assertEquals(expectedJobIdsToKeep, getOverviewJobIds(baseUrl));
+			Assert.assertEquals(expectedInitialJobIdsToKeep, getOverviewJobIds(baseUrl));
 
-			String newJobId = createLegacyArchive(jmDirectory.toPath(), numInitialJobs * oneMinuteSinceEpoch);
+			String jobAfterHsStarted = createLegacyArchive(jmDirectory.toPath(), numInitialJobs * oneMinuteSinceEpoch);
 			Thread.sleep(historyServerConfig.getLong(HistoryServerOptions.HISTORY_SERVER_ARCHIVE_REFRESH_INTERVAL));
 			Assert.assertEquals(numJobsToKeepInHistory, getOverviewJobIds(baseUrl).size());
-			Assert.assertTrue(getOverviewJobIds(baseUrl).contains(newJobId));
-
+			Assert.assertTrue(getOverviewJobIds(baseUrl).contains(jobAfterHsStarted));
 		} finally {
 			hs.stop();
 		}
