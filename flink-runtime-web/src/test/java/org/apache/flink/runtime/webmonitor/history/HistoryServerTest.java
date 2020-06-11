@@ -153,7 +153,7 @@ public class HistoryServerTest extends TestLogger {
 	}
 
 	@Test
-	public void testRemoveOldestModifiedArchivesOverHistorySizeLimit() throws Exception {
+	public void testRemoveOldestModifiedArchivesBeyondHistorySizeLimit() throws Exception {
 		final int numInitialJobs = 4;
 		final int numJobsToKeepInHistory = 2;
 		final int firstJobToKeep = numInitialJobs - numJobsToKeepInHistory;

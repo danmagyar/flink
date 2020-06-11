@@ -195,7 +195,7 @@ class HistoryServerArchiveFetcher {
 				LOG.debug("Starting archive fetching.");
 				List<ArchiveEvent> events = new ArrayList<>();
 				Set<String> jobsToRemove = new HashSet<>(cachedArchives);
-				Set<Path> oldJobArchivesToRemove = new HashSet<>();
+				Set<Path> archivesBeyondSizeLimit = new HashSet<>();
 				for (HistoryServer.RefreshLocation refreshLocation : refreshDirs) {
 					Path refreshDir = refreshLocation.getPath();
 					FileSystem refreshFS = refreshLocation.getFs();
@@ -228,7 +228,8 @@ class HistoryServerArchiveFetcher {
 						}
 
 						if (++historySize > maxHistorySize) {
-							oldJobArchivesToRemove.add(jobArchivePath);
+							archivesBeyondSizeLimit.add(jobArchivePath);
+							continue;
 						}
 
 						jobsToRemove.remove(jobID);
@@ -301,8 +302,8 @@ class HistoryServerArchiveFetcher {
 				if (!jobsToRemove.isEmpty() && processArchiveDeletion) {
 					events.addAll(cleanupExpiredJobs(jobsToRemove));
 				}
-				if (!oldJobArchivesToRemove.isEmpty()) {
-					events.addAll(cleanupOldJobs(oldJobArchivesToRemove));
+				if (!archivesBeyondSizeLimit.isEmpty()) {
+					events.addAll(cleanupOldJobs(archivesBeyondSizeLimit));
 				}
 				if (!events.isEmpty()) {
 					updateJobOverview(webOverviewDir, webDir);
