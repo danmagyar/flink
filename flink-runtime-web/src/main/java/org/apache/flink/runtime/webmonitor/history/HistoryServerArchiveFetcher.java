@@ -317,7 +317,7 @@ class HistoryServerArchiveFetcher {
 
 		private List<ArchiveEvent> cleanupJobsBeyondSizeLimit(Set<Path> jobArchivesToRemove) {
 			Set<String> jobIdsToRemoveFromOverview = new HashSet<>();
-			for (Path archive : jobArchivesToRemove ) {
+			for (Path archive : jobArchivesToRemove) {
 				jobIdsToRemoveFromOverview.add(archive.getName());
 				try {
 					archive.getFileSystem().delete(archive, false);

@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.webmonitor.history;
 
-import com.google.common.collect.Sets;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -60,7 +59,13 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -164,7 +169,7 @@ public class HistoryServerTest extends TestLogger {
 
 		for (int j = 0; j < numArchivesBeforeHsStarted; j++) {
 			String jobId = createLegacyArchive(jmDirectory.toPath(), j * oneMinuteSinceEpoch);
-			if( j >= numArchivesToRemoveUponHsStart){
+			if (j >= numArchivesToRemoveUponHsStart){
 				expectedJobIdsToKeep.add(jobId);
 			}
 		}
@@ -193,17 +198,17 @@ public class HistoryServerTest extends TestLogger {
 		try {
 			hs.start();
 			String baseUrl = "http://localhost:" + hs.getWebPort();
-			assertTrue( numArchivesCreatedInitially.await(10L, TimeUnit.SECONDS));
-			assertTrue( numArchivesDeletedInitially.await(10L, TimeUnit.SECONDS));
-			Assert.assertEquals(Sets.newHashSet(expectedJobIdsToKeep), getIdsFromJobOverview(baseUrl));
+			assertTrue(numArchivesCreatedInitially.await(10L, TimeUnit.SECONDS));
+			assertTrue(numArchivesDeletedInitially.await(10L, TimeUnit.SECONDS));
+			Assert.assertEquals(new HashSet<>(expectedJobIdsToKeep), getIdsFromJobOverview(baseUrl));
 
 			for (int j = numArchivesBeforeHsStarted; j < numArchivesBeforeHsStarted + numArchivesAfterHsStarted; j++) {
 				expectedJobIdsToKeep.remove(0);
 				expectedJobIdsToKeep.add(createLegacyArchive(jmDirectory.toPath(), j * oneMinuteSinceEpoch));
 			}
-			assertTrue( numArchivesCreatedTotal.await(10L, TimeUnit.SECONDS));
-			assertTrue( numArchivesDeletedTotal.await(10L, TimeUnit.SECONDS));
-			Assert.assertEquals(Sets.newHashSet(expectedJobIdsToKeep), getIdsFromJobOverview(baseUrl));
+			assertTrue(numArchivesCreatedTotal.await(10L, TimeUnit.SECONDS));
+			assertTrue(numArchivesDeletedTotal.await(10L, TimeUnit.SECONDS));
+			Assert.assertEquals(new HashSet<>(expectedJobIdsToKeep), getIdsFromJobOverview(baseUrl));
 		} finally {
 			hs.stop();
 		}
