@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.webmonitor.history;
 
+import com.google.common.collect.Sets;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -154,39 +155,61 @@ public class HistoryServerTest extends TestLogger {
 
 	@Test
 	public void testRemoveOldestModifiedArchivesBeyondHistorySizeLimit() throws Exception {
-		final int numInitialJobs = 4;
-		final int numJobsToKeepInHistory = 2;
-		final int firstJobToKeep = numInitialJobs - numJobsToKeepInHistory;
+		final int numArchivesToKeepInHistory = 2;
+		final int numArchivesBeforeHsStarted = 4;
+		final int numArchivesAfterHsStarted = 2;
+		final int numArchivesToRemoveUponHsStart = numArchivesBeforeHsStarted - numArchivesToKeepInHistory;
 		final long oneMinuteSinceEpoch = 1000L * 60L;
-		Set<String> expectedInitialJobIdsToKeep = new HashSet<>();
+		List<String> expectedJobIdsToKeep = new LinkedList<>();
 
-		for (int j = 0; j < numInitialJobs; j++) {
+		for (int j = 0; j < numArchivesBeforeHsStarted; j++) {
 			String jobId = createLegacyArchive(jmDirectory.toPath(), j * oneMinuteSinceEpoch);
-			if( j >= firstJobToKeep){
-				expectedInitialJobIdsToKeep.add(jobId);
+			if( j >= numArchivesToRemoveUponHsStart){
+				expectedJobIdsToKeep.add(jobId);
 			}
 		}
 
+		CountDownLatch numArchivesCreatedInitially = new CountDownLatch(numArchivesToKeepInHistory);
+		CountDownLatch numArchivesDeletedInitially = new CountDownLatch(numArchivesToRemoveUponHsStart);
+		CountDownLatch numArchivesCreatedTotal = new CountDownLatch(numArchivesBeforeHsStarted - numArchivesToRemoveUponHsStart + numArchivesAfterHsStarted);
+		CountDownLatch numArchivesDeletedTotal = new CountDownLatch(numArchivesToRemoveUponHsStart + numArchivesAfterHsStarted);
+
 		Configuration historyServerConfig = createTestConfiguration(HistoryServerOptions.HISTORY_SERVER_CLEANUP_EXPIRED_JOBS.defaultValue());
-		historyServerConfig.set(HistoryServerOptions.HISTORY_SERVER_MAX_SIZE, numJobsToKeepInHistory);
-		historyServerConfig.set(HistoryServerOptions.HISTORY_SERVER_ARCHIVE_REFRESH_INTERVAL, 100L);
-		HistoryServer hs = new HistoryServer(historyServerConfig);
+		historyServerConfig.set(HistoryServerOptions.HISTORY_SERVER_MAX_SIZE, numArchivesToKeepInHistory);
+		HistoryServer hs = new HistoryServer(historyServerConfig,
+			(event) -> {
+			switch (event.getType()){
+				case CREATED:
+					numArchivesCreatedInitially.countDown();
+					numArchivesCreatedTotal.countDown();
+					break;
+				case DELETED:
+					numArchivesDeletedInitially.countDown();
+					numArchivesDeletedTotal.countDown();
+					break;
+			}
+		});
 
 		try {
 			hs.start();
 			String baseUrl = "http://localhost:" + hs.getWebPort();
-			Assert.assertEquals(expectedInitialJobIdsToKeep, getOverviewJobIds(baseUrl));
+			assertTrue( numArchivesCreatedInitially.await(10L, TimeUnit.SECONDS));
+			assertTrue( numArchivesDeletedInitially.await(10L, TimeUnit.SECONDS));
+			Assert.assertEquals(Sets.newHashSet(expectedJobIdsToKeep), getIdsFromJobOverview(baseUrl));
 
-			String jobAfterHsStarted = createLegacyArchive(jmDirectory.toPath(), numInitialJobs * oneMinuteSinceEpoch);
-			Thread.sleep(historyServerConfig.getLong(HistoryServerOptions.HISTORY_SERVER_ARCHIVE_REFRESH_INTERVAL));
-			Assert.assertEquals(numJobsToKeepInHistory, getOverviewJobIds(baseUrl).size());
-			Assert.assertTrue(getOverviewJobIds(baseUrl).contains(jobAfterHsStarted));
+			for (int j = numArchivesBeforeHsStarted; j < numArchivesBeforeHsStarted + numArchivesAfterHsStarted; j++) {
+				expectedJobIdsToKeep.remove(0);
+				expectedJobIdsToKeep.add(createLegacyArchive(jmDirectory.toPath(), j * oneMinuteSinceEpoch));
+			}
+			assertTrue( numArchivesCreatedTotal.await(10L, TimeUnit.SECONDS));
+			assertTrue( numArchivesDeletedTotal.await(10L, TimeUnit.SECONDS));
+			Assert.assertEquals(Sets.newHashSet(expectedJobIdsToKeep), getIdsFromJobOverview(baseUrl));
 		} finally {
 			hs.stop();
 		}
 	}
 
-	private Set<String> getOverviewJobIds(String baseUrl) throws Exception {
+	private Set<String> getIdsFromJobOverview(String baseUrl) throws Exception {
 		return getJobsOverview(baseUrl).getJobs().stream()
 			.map(JobDetails::getJobId)
 			.map(JobID::toString)
